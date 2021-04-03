@@ -1,0 +1,93 @@
+package main
+
+import (
+	"os"
+	"text/template"
+)
+
+type Animation struct {
+	Skin      uint
+	Mode      Mode
+	Dir       Dir
+	StartTile uint
+}
+
+type Mode string
+type Dir string
+
+const (
+	ModeIdle Mode = "idle"
+	ModeWalk Mode = "walk"
+	DirN     Dir  = "n"
+	DirNE    Dir  = "ne"
+	DirE     Dir  = "e"
+	DirSE    Dir  = "se"
+	DirS     Dir  = "s"
+	DirSW    Dir  = "sw"
+	DirW     Dir  = "w"
+	DirNW    Dir  = "nw"
+)
+
+var walkDirs = []Dir{
+	DirE, DirNE, DirN, DirNW, DirW, DirSW, DirSE, DirS,
+}
+
+var idleDirs = []Dir{
+	DirE, DirNE, DirN, DirNW, DirW, DirSE, DirSW, DirS,
+}
+
+func main() {
+	a := make([]Animation, 0)
+	i := 1
+	for skin := uint(1); skin < 6; skin++ {
+		for j, dir := range walkDirs {
+			a = append(a, Animation{
+				Skin:      skin,
+				Mode:      ModeWalk,
+				Dir:       dir,
+				StartTile: uint(i + (j * 6)),
+			})
+		}
+		i += 48
+	}
+
+	for skin := uint(1); skin < 6; skin++ {
+		for j, dir := range idleDirs {
+			a = append(a, Animation{
+				Skin:      skin,
+				Mode:      ModeIdle,
+				Dir:       dir,
+				StartTile: uint(i + j),
+			})
+		}
+		i += 8
+	}
+
+	t, err := template.New("animation").Parse(`
+animations {
+	id: "{{ .Skin }}_{{ .Mode }}_{{ .Dir }}"
+	start_tile: {{ .StartTile }}
+	end_tile: {{ .EndTile }}
+	playback: {{ if eq .Mode "walk" }}PLAYBACK_LOOP_FORWARD{{ else }}PLAYBACK_ONCE_FORWARD{{ end }}
+	fps: 5
+	flip_horizontal: 0
+	flip_vertical: 0
+}`)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, a := range a {
+		if err := t.Execute(os.Stdout, a); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func (a Animation) EndTile() uint {
+	if a.Mode == ModeWalk {
+		return a.StartTile + 5
+	}
+
+	return a.StartTile
+}

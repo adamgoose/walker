@@ -1,0 +1,22 @@
+function init(self)
+	gui.set_enabled(gui.get_node("w_key"), false)
+	gui.set_enabled(gui.get_node("a_key"), false)
+	gui.set_enabled(gui.get_node("s_key"), false)
+	gui.set_enabled(gui.get_node("d_key"), false)
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("connected") then
+		gui.set_color(gui.get_node("pip"), vmath.vector4(0, 255, 0, 0.5))
+		gui.set_enabled(gui.get_node("w_key"), true)
+		gui.set_enabled(gui.get_node("a_key"), true)
+		gui.set_enabled(gui.get_node("s_key"), true)
+		gui.set_enabled(gui.get_node("d_key"), true)
+	end
+	if message_id == hash("disconnected") then
+		gui.set_color(gui.get_node("pip"), vmath.vector4(255, 0, 0, 0.5))
+	end
+	if message_id == hash("set_text") then
+		gui.set_text(gui.get_node("text"), message.text)
+	end
+end

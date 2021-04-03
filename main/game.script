@@ -1,0 +1,80 @@
+nakama = require "nakama.nakama"
+json = require "nakama.util.json"
+
+function init(self)
+	self.match = nil
+	self.player = nil
+	self.players = {}
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("join_match") then
+		self.match = message.match
+		msg.post("/gameGui", "set_text", { text = "Friends!" })
+
+		-- spawn self
+		self.player = factory.create("#playerFactory", nil, nil, { skin = message.skin })
+		msg.post(self.player, "enable_control")
+		msg.post(self.player, "report_player_position")
+		msg.post(self.player, "email", { email = self.match.self.username })
+
+		-- spawn other players
+		if self.match.presences ~= nil then
+			for _, player in ipairs(self.match.presences) do
+				if player.session_id ~= self.match.self.session_id then
+					spawn_player(self, player)
+				end
+			end
+		end
+	end
+
+	if message_id == hash("on_matchpresence") then
+		pprint(message)
+		if message.joins ~= nil then
+			for _, player in ipairs(message.joins) do
+				spawn_player(self, player)
+			end
+		end
+		if message.leaves ~= nil then
+			for _, player in ipairs(message.leaves) do
+				despwan_player(self, player)
+			end
+		end
+	end
+	
+	if message_id == hash("on_matchdata") then
+		pprint(message)
+		if message.op_code == "1" then
+			position_player(self, message.presence, json.decode(message.data))
+		end
+	end
+
+	if message_id == hash("player_position") and self.match ~= nil then
+		msg.post("/controller", "send_match_state", {
+			match_id = self.match.match_id,
+			op_code = 1,
+			data = message
+		})
+	end
+end
+
+function position_player(self, presence, data)
+	local player = self.players[presence.session_id]
+	if player ~= nil then
+		msg.post(player, "move", data)
+	end
+end
+
+function spawn_player(self, presence)
+	if self.players[presence.session_id] ~= nil or presence.session_id == self.match.self.session_id then
+		return
+	end
+	local player = factory.create("#playerFactory")
+	self.players[presence.session_id] = player
+	msg.post(player, "email", { email=presence.username })
+end
+
+function despwan_player(self, presence)
+	go.delete(self.players[presence.session_id])
+	self.players[presence.session_id] = nil
+end

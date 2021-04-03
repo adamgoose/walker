@@ -1,0 +1,35 @@
+local dirtylarry = require "dirtylarry/dirtylarry"
+
+function init(self)
+	msg.post(".", "acquire_input_focus")
+	self.email = ""
+	self.password = ""
+
+	-- Debug only for adam, cuz awesomeness
+	-- gui.set_text(gui.get_node('email/content'), "adam@enge.me")
+	-- gui.set_text(gui.get_node('password/content'), "asdfasdf")
+end
+
+function on_input(self, action_id, action)
+	self.email = dirtylarry:input("email", action_id, action, gui.KEYBOARD_TYPE_EMAIL, "Enter your email")
+	self.password = dirtylarry:input("password", action_id, action, gui.KEYBOARD_TYPE_PASSWORD, "Enter your password")
+
+	dirtylarry:button("join", action_id, action, function ()
+		if self.email == "" or self.password == "" then
+			return
+		end
+		msg.post("/controller", "login", {
+			email    = self.email,
+			password = self.password
+		})
+	end)
+	
+	dirtylarry:button("quit", action_id, action, function ()
+		print("quitting")
+		msg.post("@system:", "exit", {code = 0})
+	end)
+
+	dirtylarry:button("skinPicker", action_id, action, function ()
+		msg.post("/controller", "increment_skin")
+	end)
+end

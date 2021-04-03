@@ -1,0 +1,113 @@
+defold = require "nakama.engine.defold"
+nakama = require "nakama.nakama"
+json = require "nakama.util.json"
+
+function init(self)
+	self.client = nakama.create_client({
+		host = "nakama.enge.me",
+		port = 443,
+		use_ssl = true,
+		username = "defaultkey",
+		password = "",
+		engine = defold,
+	})
+	self.socket = nakama.create_socket(self.client)
+	self.email = ""
+	self.ticket = nil
+	self.toy = nil
+	math.randomseed(os.clock()*100000000000)
+	self.skin = math.random(6)
+	msg.post("/mainMenu#sprite", "play_animation", { id=hash(self.skin .. "_walk_sw") })
+
+	msg.post("/game", "disable")
+
+	nakama.on_matchmakermatched(self.socket, function (message)
+		local matched = message.matchmaker_matched
+		
+		-- compare matchmaker_matched.ticket with self.ticket
+		if matched.ticket ~= self.ticket then
+			return
+		end
+		
+		-- matchmaker_matched.token
+		msg.post("/gameGui", "set_text", { text="Connecting to friends!" })
+		nakama.sync(function ()
+			local body = nakama.create_match_join_message(nil, matched.token)
+			local match = nakama.socket_send(self.socket, body)
+			go.delete(self.toy)
+			match.skin = self.skin
+			msg.post("/game", "join_match", match)
+		end)
+	end)
+	nakama.on_matchdata(self.socket, function (message)
+		msg.post("/game", "on_matchdata", message.match_data)
+	end)
+	nakama.on_matchpresence(self.socket, function (message)
+		msg.post("/game", "on_matchpresence", message.match_presence_event)
+	end)
+end
+
+function email_login(self, email, password)
+	local body = nakama.create_api_account_email(email, password)
+	local result = nakama.authenticate_email(self.client, body, true, email)
+	if result.token then
+		self.email = email
+		nakama.set_bearer_token(self.client, result.token)
+		return true
+	end
+
+	msg.post("/gameGui", "set_text", { text = result.message })
+	return false
+end
+
+function connect(self)
+	local ok, err = nakama.socket_connect(self.socket)
+	if ok then
+		-- Update UI
+		msg.post("/mainMenu", "disable")
+		msg.post("/gameGui", "connected")
+		msg.post("/gameGui", "set_text", { text = "Looking for friends..." })
+
+		-- Spawn Player
+		self.toy = factory.create("#playerFactory", nil, nil, { skin = self.skin })
+		msg.post(self.toy, "enable_control")
+		msg.post(self.toy, "email", { email=self.email })
+
+		-- Begin Matchmaking
+		local body = nakama.create_matchmaker_add_message("*", 2, 2, nil, nil)
+		local ticket = nakama.socket_send(self.socket, body)
+		self.ticket = ticket.matchmaker_ticket.ticket
+	else
+		pprint(err)
+	end
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("login") then
+		nakama.sync(function () 
+			if email_login(self, message.email, message.password) then
+				connect(self)
+			end
+		end)
+	end
+	if message_id == hash("socket_send") then
+		nakama.sync(function ()
+			nakama.socket_send(self.socket, message)
+		end)
+	end
+	if message_id == hash("send_match_state") then
+		nakama.sync(function ()
+			local data = json.encode(message.data)
+			local body = nakama.create_match_data_message(message.match_id, message.op_code, data)
+			nakama.socket_send(self.socket, body)
+		end)
+	end
+	if message_id == hash("increment_skin") then
+		if self.skin == 5 then
+			self.skin = 1
+		else
+			self.skin = self.skin + 1
+		end
+		msg.post("/mainMenu#sprite", "play_animation", { id=hash(self.skin .. "_walk_sw") })
+	end
+end
