@@ -1,0 +1,4 @@
+nakama = require("nakama.nakama")
+defold = require("nakama.engine.defold")
+json = require("nakama.util.json")
+dirtylarry = require("dirtylarry/dirtylarry")

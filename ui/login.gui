@@ -1,4 +1,4 @@
-script: "/ui/login.gui_script"
+script: "/scripts/gui/LoginGUI.gui_script"
 fonts {
   name: "button"
   font: "/ui/button.font"

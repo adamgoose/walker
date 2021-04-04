@@ -1,4 +1,4 @@
-script: "/ui/game.gui_script"
+script: "/scripts/gui/GameGUI.gui_script"
 fonts {
   name: "larryfont"
   font: "/dirtylarry/larryfont.font"
