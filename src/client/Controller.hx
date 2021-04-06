@@ -2,16 +2,16 @@ import defold.support.Script;
 import defold.support.ScriptOnInputAction;
 import defold.Sprite;
 import defold.Factory;
-import nakama.*;
-import lua.Math.randomseed;
-import lua.Math.random;
+import nakama.Nakama;
+import nakama.Types;
+import lua.Math;
 import lua.Table;
 
 typedef ControllerData = {
 	var client:Client;
 	var socket:Socket;
 
-	var email:String;
+	var username:String;
 	var ticket:String;
 	var toy:Hash;
 	var skin:Int;
@@ -23,6 +23,9 @@ class Controller extends defold.support.Script<ControllerData> {
 			host: "nakama.enge.me",
 			port: 443,
 			use_ssl: true,
+			// host: "127.0.0.1",
+			// port: 7350,
+			// use_ssl: false,
 			username: "defaultkey",
 			password: "",
 			engine: DefoldEngine,
@@ -30,10 +33,10 @@ class Controller extends defold.support.Script<ControllerData> {
 		self.socket = Nakama.create_socket(self.client);
 
 		// seed randomizer
-		randomseed(Date.now().getTime() * 100000000000);
+		Math.randomseed(lua.Os.time() * 1000);
 
 		// pick skin
-		self.skin = Std.int(random(5));
+		self.skin = Std.int(Math.random(5));
 		Msg.post("/mainMenu#sprite", SpriteMessages.play_animation, {
 			id: hash('${self.skin}_walk_sw'),
 		});
@@ -85,8 +88,10 @@ class Controller extends defold.support.Script<ControllerData> {
 
 	function handleLogin(self:ControllerData, cmd:Messages.LoginCmd) {
 		// Authenticate
-		var req = Nakama.create_api_account_email(cmd.email, cmd.password);
-		var resp = Nakama.authenticate_email(self.client, req, true, cmd.email);
+		var req = Nakama.create_api_account_device(DefoldEngine.uuid());
+		var resp = Nakama.authenticate_device(self.client, req, true);
+		// var req = Nakama.create_api_account_email(cmd.email, cmd.password);
+		// var resp = Nakama.authenticate_email(self.client, req, true, cmd.username);
 		if (resp.error) {
 			Msg.post("/gameGui", Messages.SetText, {
 				text: resp.message,
@@ -95,19 +100,16 @@ class Controller extends defold.support.Script<ControllerData> {
 		}
 
 		// Connect
-		self.email = cmd.email;
+		self.username = cmd.username;
 		Nakama.set_bearer_token(self.client, resp.token);
 		var ok = Nakama.socket_connect(self.socket);
 		if (!ok.ok) {
-			pprint(ok.err);
+			pprint(ok);
 		}
 
 		// Update UI
 		Msg.post("/mainMenu", GoMessages.disable);
 		Msg.post("/gameGui", Messages.Connected);
-		Msg.post("/gameGui", Messages.SetText, {
-			text: "Looking for friends...",
-		});
 
 		// Spawn Toy
 		self.toy = spawnToy(self);
@@ -117,7 +119,15 @@ class Controller extends defold.support.Script<ControllerData> {
 	}
 
 	function beginMatchmaking(self:ControllerData):String {
-		var req = Nakama.create_matchmaker_add_message("*", 2, 2, null, null);
+		Msg.post("/gameGui", Messages.SetText, {
+			text: "Looking for friends...",
+		});
+
+		var sProps = Table.create();
+		sProps.username = self.username;
+		var nProps = Table.create();
+		nProps.skin = self.skin / 1;
+		var req = Nakama.create_matchmaker_add_message("*", 2, 10, sProps, nProps);
 		var ticket = Nakama.socket_send(self.socket, req);
 
 		return ticket.matchmaker_ticket.ticket;
@@ -129,26 +139,26 @@ class Controller extends defold.support.Script<ControllerData> {
 		var toy = Factory.create("#playerFactory", null, null, p);
 		Msg.post(toy, Messages.EnableControl);
 		Msg.post(toy, Messages.SetText, {
-			text: self.email,
+			text: self.username,
 		});
 
 		return toy;
 	}
 
-	function onMatchmakermatched(self:ControllerData, message:Dynamic):Void {
+	function onMatchmakermatched(self:ControllerData, message:nakama.Matchmakermatched):Void {
 		if (message.ticket != self.ticket)
 			return;
+
+		self.ticket = null;
 
 		Msg.post("/gameGui", Messages.SetText, {
 			text: "Connecting to friends!",
 		});
 		Nakama.sync(function() {
-			var req = Nakama.create_match_join_message(null, message.token);
-			var match = Nakama.socket_send(self.socket, req);
+			var req = Nakama.create_match_join_message(message.match_id, message.token);
+			var match:Messages.JoinMatchCmd = Nakama.socket_send(self.socket, req);
 			match.skin = self.skin;
-
-			// send match.match as nakama.Match
-			// send skin in another message
+			match.users = message.users;
 
 			Go.delete(self.toy);
 			Msg.post("/game", Messages.JoinMatch, match);

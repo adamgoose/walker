@@ -1,0 +1,2 @@
+prototype: "/beer/beer.go"
+load_dynamically: false

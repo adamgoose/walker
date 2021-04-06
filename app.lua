@@ -197,6 +197,7 @@ local Enum = _hx_e();
 
 local Array = _hx_e()
 __defold_support_Script = _hx_e()
+local Beer = _hx_e()
 local Controller = _hx_e()
 local Date = _hx_e()
 local Game = _hx_e()
@@ -212,6 +213,7 @@ local StringTools = _hx_e()
 local ValueType = _hx_e()
 local Type = _hx_e()
 __defold_GoMessages = _hx_e()
+__defold_PhysicsMessages = _hx_e()
 __defold_SpriteMessages = _hx_e()
 __defold_SysMessages = _hx_e()
 __defold_support_GuiScript = _hx_e()
@@ -220,6 +222,7 @@ __gui_GameGUI = _hx_e()
 __defold_support_Init = _hx_e()
 __haxe_IMap = _hx_e()
 __haxe_Json = _hx_e()
+__haxe_ds_ObjectMap = _hx_e()
 __haxe_ds_StringMap = _hx_e()
 __haxe_format_JsonPrinter = _hx_e()
 __haxe_iterators_ArrayIterator = _hx_e()
@@ -559,6 +562,31 @@ __defold_support_Script.prototype = _hx_e();
 
 __defold_support_Script.prototype.__class__ =  __defold_support_Script
 
+Beer.new = function() 
+  local self = _hx_new(Beer.prototype)
+  Beer.super(self)
+  return self
+end
+Beer.super = function(self) 
+  __defold_support_Script.super(self);
+end
+Beer.__name__ = true
+Beer.prototype = _hx_e();
+Beer.prototype.on_message = function(self,_self,message_id,message,sender) 
+  if (message_id) == Beer.Nuke then 
+    _G.go.delete(".");
+  elseif (message_id) == Beer.SetId then 
+    _self.id = _hx_funcToField(message.id);
+  elseif (message_id) == __defold_PhysicsMessages.collision_response then 
+    if (_G.go.get(_G.msg.url(nil, message.other_id, _G.hash("player")), "controlled")) then 
+      _G.msg.post("/game", Beer.BeerClaimed, _hx_o({__fields__={id=true},id=_self.id}));
+    end; end;
+end
+
+Beer.prototype.__class__ =  Beer
+Beer.__super__ = __defold_support_Script
+setmetatable(Beer.prototype,{__index=__defold_support_Script.prototype})
+
 Controller.new = function() 
   local self = _hx_new(Controller.prototype)
   Controller.super(self)
@@ -573,13 +601,7 @@ Controller.prototype.init = function(self,_self)
   local _gthis = self;
   _self.client = nakama.create_client(_hx_o({__fields__={host=true,port=true,use_ssl=true,username=true,password=true,engine=true},host="nakama.enge.me",port=443,use_ssl=true,username="defaultkey",password="",engine=defold}));
   _self.socket = nakama.create_socket(_self.client);
-  local t = _G.os.time() * 1000;
-  local d = _hx_e();
-  _G.setmetatable(d, _hx_o({__fields__={__index=true},__index=Date.prototype}));
-  d.t = t / 1000;
-  d.d = _G.os.date("*t", Std.int(d.t));
-  d.dUTC = _G.os.date("!*t", Std.int(d.t));
-  _G.math.randomseed(d:getTime() * 100000000000);
+  _G.math.randomseed(_G.os.time() * 1000);
   local tmp = _G.math.random(5);
   _self.skin = Std.int(tmp);
   _G.msg.post("/mainMenu#sprite", __defold_SpriteMessages.play_animation, _hx_o({__fields__={id=true},id=_G.hash(Std.string(Std.string("") .. Std.string(_self.skin)) .. Std.string("_walk_sw"))}));
@@ -628,26 +650,30 @@ Controller.prototype.on_message = function(self,_self,message_id,message,sender)
     end); end;
 end
 Controller.prototype.handleLogin = function(self,_self,cmd) 
-  local req = nakama.create_api_account_email(cmd.email, cmd.password);
-  local resp = nakama.authenticate_email(_self.client, req, true, cmd.email);
+  local req = nakama.create_api_account_device(defold.uuid());
+  local resp = nakama.authenticate_device(_self.client, req, true);
   if (resp.error) then 
     _G.msg.post("/gameGui", Messages.SetText, _hx_o({__fields__={text=true},text=resp.message}));
     do return end;
   end;
-  _self.email = _hx_funcToField(cmd.email);
+  _self.username = _hx_funcToField(cmd.username);
   nakama.set_bearer_token(_self.client, resp.token);
-  local _hx_1_ok_ok, _hx_1_ok_err = nakama.socket_connect(_self.socket);
-  if (not _hx_1_ok_ok) then 
-    _G.pprint(_hx_1_ok_err);
+  local ok = _hx_box_mr(_hx_table.pack(nakama.socket_connect(_self.socket)), {"ok", "err"});
+  if (not ok.ok) then 
+    _G.pprint(ok);
   end;
   _G.msg.post("/mainMenu", __defold_GoMessages.disable);
   _G.msg.post("/gameGui", Messages.Connected);
-  _G.msg.post("/gameGui", Messages.SetText, _hx_o({__fields__={text=true},text="Looking for friends..."}));
   _self.toy = self:spawnToy(_self);
   _self.ticket = self:beginMatchmaking(_self);
 end
 Controller.prototype.beginMatchmaking = function(self,_self) 
-  local req = nakama.create_matchmaker_add_message("*", 2, 2, nil, nil);
+  _G.msg.post("/gameGui", Messages.SetText, _hx_o({__fields__={text=true},text="Looking for friends..."}));
+  local sProps = ({});
+  sProps.username = _self.username;
+  local nProps = ({});
+  nProps.skin = _self.skin / 1;
+  local req = nakama.create_matchmaker_add_message("*", 2, 10, sProps, nProps);
   do return nakama.socket_send(_self.socket, req).matchmaker_ticket.ticket end
 end
 Controller.prototype.spawnToy = function(self,_self) 
@@ -655,18 +681,20 @@ Controller.prototype.spawnToy = function(self,_self)
   p.skin = _self.skin;
   local toy = _G.factory.create("#playerFactory", nil, nil, p);
   _G.msg.post(toy, Messages.EnableControl);
-  _G.msg.post(toy, Messages.SetText, _hx_o({__fields__={text=true},text=_self.email}));
+  _G.msg.post(toy, Messages.SetText, _hx_o({__fields__={text=true},text=_self.username}));
   do return toy end
 end
 Controller.prototype.onMatchmakermatched = function(self,_self,message) 
   if (message.ticket ~= _self.ticket) then 
     do return end;
   end;
+  _self.ticket = nil;
   _G.msg.post("/gameGui", Messages.SetText, _hx_o({__fields__={text=true},text="Connecting to friends!"}));
   nakama.sync(function() 
-    local req = nakama.create_match_join_message(nil, message.token);
+    local req = nakama.create_match_join_message(message.match_id, message.token);
     local match = nakama.socket_send(_self.socket, req);
     match.skin = _hx_funcToField(_self.skin);
+    match.users = _hx_funcToField(message.users);
     _G.go.delete(_self.toy);
     _G.msg.post("/game", Messages.JoinMatch, match);
   end);
@@ -691,9 +719,6 @@ Date.prototype = _hx_e();
 Date.prototype.d= nil;
 Date.prototype.dUTC= nil;
 Date.prototype.t= nil;
-Date.prototype.getTime = function(self) 
-  do return self.t * 1000 end
-end
 Date.prototype.getHours = function(self) 
   do return self.d.hour end
 end
@@ -726,13 +751,54 @@ end
 Game.__name__ = true
 Game.prototype = _hx_e();
 Game.prototype.init = function(self,_self) 
-  _self.players = __haxe_ds_StringMap.new();
+  _self.users = __haxe_ds_StringMap.new();
+  _self.playerObjs = __haxe_ds_StringMap.new();
+  _self.beerObjs = __haxe_ds_StringMap.new();
+end
+Game.prototype.spawnBeer = function(self,_self,beer) 
+  local p = _G.vmath.vector3(beer.position.x, beer.position.y, beer.position.z);
+  local this1 = _self.beerObjs;
+  local k = beer.id;
+  local v = _G.factory.create("#beerFactory", p, nil, nil, 0.75);
+  local _this = this1;
+  if (v == nil) then 
+    _this.h[k] = __haxe_ds_StringMap.tnull;
+  else
+    _this.h[k] = v;
+  end;
+  _G.msg.post(v, Beer.SetId, _hx_o({__fields__={id=true},id=beer.id}));
 end
 Game.prototype.on_message = function(self,_self,message_id,message,sender) 
-  if (message_id) == Messages.JoinMatch then 
+  if (message_id) == Beer.BeerClaimed then 
+    local ret = _self.beerObjs.h[message.id];
+    if (ret == __haxe_ds_StringMap.tnull) then 
+      ret = nil;
+    end;
+    if (ret ~= nil) then 
+      local ret = _self.beerObjs.h[message.id];
+      if (ret == __haxe_ds_StringMap.tnull) then 
+        ret = nil;
+      end;
+      _G.msg.post(ret, Beer.Nuke);
+      _self.beerObjs:remove(message.id);
+    end;
+    _G.msg.post("/controller", Messages.SendMatchState, _hx_o({__fields__={match_id=true,op_code=true,data=true},match_id=_self.match.match_id,op_code=3,data=message}));
+  elseif (message_id) == Messages.JoinMatch then 
     _self.match = _hx_funcToField(message.match);
+    local u = __lua_PairTools.ipairsIterator(message.users);
+    while (u:hasNext()) do 
+      local u = u:next();
+      local k = u.value.presence.session_id;
+      local v = u.value;
+      local _this = _self.users;
+      if (v == nil) then 
+        _this.h[k] = __haxe_ds_StringMap.tnull;
+      else
+        _this.h[k] = v;
+      end;
+    end;
     _G.msg.post("/gameGui", Messages.SetText, _hx_o({__fields__={text=true},text="Friends!"}));
-    self:spawnSelf(_self, message.skin, _self.match["self"].username);
+    self:spawnSelf(_self, message.skin);
     local player = __lua_PairTools.ipairsIterator(_self.match.presences);
     while (player:hasNext()) do 
       self:spawnPlayer(_self, player:next().value);
@@ -740,36 +806,100 @@ Game.prototype.on_message = function(self,_self,message_id,message,sender)
   elseif (message_id) == Messages.Move then 
     _G.msg.post("/controller", Messages.SendMatchState, _hx_o({__fields__={match_id=true,op_code=true,data=true},match_id=_self.match.match_id,op_code=1,data=message}));
   elseif (message_id) == Messages.OnMatchdata then 
-    if (message.op_code == "1") then 
+    local _g = message.op_code;
+    if (_g) == "1" then 
       self:positionPlayer(_self, message.presence, json.decode(message.data));
-    end;
+    elseif (_g) == "2" then 
+      self:spawnBeer(_self, json.decode(message.data));
+    elseif (_g) == "3" then 
+      local beer = json.decode(message.data);
+      local ret = _self.beerObjs.h[beer.id];
+      if (ret == __haxe_ds_StringMap.tnull) then 
+        ret = nil;
+      end;
+      if (ret ~= nil) then 
+        local ret = _self.beerObjs.h[beer.id];
+        if (ret == __haxe_ds_StringMap.tnull) then 
+          ret = nil;
+        end;
+        _G.go.delete(ret);
+        _self.beerObjs:remove(beer.id);
+      end;
+    elseif (_g) == "4" then 
+      _self.scores = json.decode(message.data);
+      _G.msg.post("/gameGui", __gui_GameGUI.SetScoreboard, _self.scores); end;
   elseif (message_id) == Messages.OnMatchpresence then 
-    local player = __lua_PairTools.ipairsIterator(message.joins);
-    while (player:hasNext()) do 
-      self:spawnPlayer(_self, player:next().value);
+    if (message.joins ~= nil) then 
+      local player = __lua_PairTools.ipairsIterator(message.joins);
+      while (player:hasNext()) do 
+        self:spawnPlayer(_self, player:next().value);
+      end;
     end;
-    local player = __lua_PairTools.ipairsIterator(message.leaves);
-    while (player:hasNext()) do 
-      self:despawnPlayer(_self, player:next().value);
+    if (message.leaves ~= nil) then 
+      local player = __lua_PairTools.ipairsIterator(message.leaves);
+      while (player:hasNext()) do 
+        self:despawnPlayer(_self, player:next().value);
+      end;
     end; end;
 end
-Game.prototype.spawnSelf = function(self,_self,skin,text) 
+Game.prototype.spawnSelf = function(self,_self,skin) 
   local p = ({});
   p.skin = skin;
   local player = _G.factory.create("#playerFactory", nil, nil, p);
   _G.msg.post(player, Messages.EnableControl);
   _G.msg.post(player, Messages.ReportPlayerPosition);
-  _G.msg.post(player, Messages.SetText, _hx_o({__fields__={text=true},text=text}));
-  _self.player = player do return _self.player end
+  local ret = _self.users.h[_self.match["self"].session_id];
+  if (ret == __haxe_ds_StringMap.tnull) then 
+    ret = nil;
+  end;
+  local obj = __haxe_ds_ObjectMap.new();
+  __lua_PairTools.pairsFold(ret.string_properties, function(k,v,m) 
+    obj.h[k] = v;
+    obj.k[k] = true;
+    do return obj end;
+  end, obj);
+  local ret = obj.h.username;
+  if (ret == __haxe_ds_StringMap.tnull) then 
+    ret = nil;
+  end;
+  _G.msg.post(player, Messages.SetText, _hx_o({__fields__={text=true},text=ret}));
+  _self.playerObj = player do return _self.playerObj end
 end
 Game.prototype.spawnPlayer = function(self,_self,presence) 
-  if ((_self.players.h[presence.session_id] ~= nil) or (presence.session_id == _self.match["self"].session_id)) then 
+  if ((_self.playerObjs.h[presence.session_id] ~= nil) or ((_self.match ~= nil) and (presence.session_id == _self.match["self"].session_id))) then 
     do return nil end;
   end;
-  local player = _G.factory.create("#playerFactory");
-  _G.msg.post(player, Messages.SetText, _hx_o({__fields__={text=true},text=presence.username}));
+  local ret = _self.users.h[presence.session_id];
+  if (ret == __haxe_ds_StringMap.tnull) then 
+    ret = nil;
+  end;
+  local u = ret;
+  local p = ({});
+  local obj = __haxe_ds_ObjectMap.new();
+  __lua_PairTools.pairsFold(u.numeric_properties, function(k,v,m) 
+    obj.h[k] = v;
+    obj.k[k] = true;
+    do return obj end;
+  end, obj);
+  local ret = obj.h.skin;
+  if (ret == __haxe_ds_StringMap.tnull) then 
+    ret = nil;
+  end;
+  p.skin = ret;
+  local player = _G.factory.create("#playerFactory", nil, nil, p);
+  local obj = __haxe_ds_ObjectMap.new();
+  __lua_PairTools.pairsFold(u.string_properties, function(k,v,m) 
+    obj.h[k] = v;
+    obj.k[k] = true;
+    do return obj end;
+  end, obj);
+  local ret = obj.h.username;
+  if (ret == __haxe_ds_StringMap.tnull) then 
+    ret = nil;
+  end;
+  _G.msg.post(player, Messages.SetText, _hx_o({__fields__={text=true},text=ret}));
   local k = presence.session_id;
-  local _this = _self.players;
+  local _this = _self.playerObjs;
   if (player == nil) then 
     _this.h[k] = __haxe_ds_StringMap.tnull;
   else
@@ -778,7 +908,7 @@ Game.prototype.spawnPlayer = function(self,_self,presence)
   do return player end
 end
 Game.prototype.positionPlayer = function(self,_self,presence,move) 
-  local ret = _self.players.h[presence.session_id];
+  local ret = _self.playerObjs.h[presence.session_id];
   if (ret == __haxe_ds_StringMap.tnull) then 
     ret = nil;
   end;
@@ -788,12 +918,12 @@ Game.prototype.positionPlayer = function(self,_self,presence,move)
   end;
 end
 Game.prototype.despawnPlayer = function(self,_self,presence) 
-  local ret = _self.players.h[presence.session_id];
+  local ret = _self.playerObjs.h[presence.session_id];
   if (ret == __haxe_ds_StringMap.tnull) then 
     ret = nil;
   end;
   _G.go.delete(ret);
-  _self.players:remove(presence.session_id);
+  _self.playerObjs:remove(presence.session_id);
 end
 
 Game.prototype.__class__ =  Game
@@ -863,15 +993,16 @@ Player.prototype.maxY= nil;
 Player.prototype.init = function(self,_self) 
   _self.state = "idle";
   _self.dirY = "s";
+  _self.dirX = "";
   _self.speed = _G.vmath.vector3();
 end
 Player.prototype.update = function(self,_self,dt) 
-  if (not _self.controlled) then 
-    do return end;
-  end;
-  if ((_self.animation == "") and (_self.skin ~= 0)) then 
+  if ((_self.animation == nil) and (_self.skin ~= 0)) then 
     _self.animation = Std.string(Std.string("") .. Std.string(_self.skin)) .. Std.string("_idle_s");
     _G.msg.post("#sprite", __defold_SpriteMessages.play_animation, _hx_o({__fields__={id=true},id=_G.hash(_self.animation)}));
+  end;
+  if (not _self.controlled) then 
+    do return end;
   end;
   local oldState = _self.state;
   local oldDirX = _self.dirX;
@@ -919,14 +1050,15 @@ Player.prototype.on_input = function(self,_self,action_id,action)
 end
 Player.prototype.on_message = function(self,_self,message_id,message,sender) 
   if (message_id) == Messages.EnableControl then 
-    _self.controlled = true;
+    _G.go.set("#player", "controlled", true);
     _G.msg.post(".", __defold_GoMessages.acquire_input_focus);
   elseif (message_id) == Messages.Move then 
     self:move(_self, message.skin, message.animation, message.position);
   elseif (message_id) == Messages.ReportPlayerPosition then 
     _self.reportPlayerPosition = true;
   elseif (message_id) == Messages.SetText then 
-    _G.label.set_text("#email", message.text); end;
+    _G.label.set_text("#email", message.text);
+  elseif (message_id) == __defold_PhysicsMessages.collision_response then  end;
 end
 Player.prototype.updatePosition = function(self,_self,dt) 
   local p = _G.go.get_position();
@@ -1409,6 +1541,9 @@ end
 __defold_GoMessages.new = {}
 __defold_GoMessages.__name__ = true
 
+__defold_PhysicsMessages.new = {}
+__defold_PhysicsMessages.__name__ = true
+
 __defold_SpriteMessages.new = {}
 __defold_SpriteMessages.__name__ = true
 
@@ -1439,17 +1574,15 @@ __gui_LoginGUI.__name__ = true
 __gui_LoginGUI.prototype = _hx_e();
 __gui_LoginGUI.prototype.init = function(self,_self) 
   _G.msg.post(".", __defold_GoMessages.acquire_input_focus);
-  _G.gui.set_text(_G.gui.get_node("email/content"), "adam@enge.me");
-  _G.gui.set_text(_G.gui.get_node("password/content"), "asdfasdf");
+  _self.username = "";
 end
 __gui_LoginGUI.prototype.on_input = function(self,_self,action_id,action) 
-  _self.email = require('dirtylarry/dirtylarry').input(_self, "email", action_id, action, _G.gui.KEYBOARD_TYPE_EMAIL, "Enter your email");
-  _self.password = require('dirtylarry/dirtylarry').input(_self, "password", action_id, action, _G.gui.KEYBOARD_TYPE_PASSWORD, "Enter your password");
+  _self.username = require('dirtylarry/dirtylarry').input(_self, "username", action_id, action, _G.gui.KEYBOARD_TYPE_DEFAULT, "Pick a username");
   require('dirtylarry/dirtylarry').button(_self, "join", action_id, action, function() 
-    if ((_self.email == "") or (_self.password == "")) then 
+    if (_self.username == "") then 
       do return end;
     end;
-    _G.msg.post("/controller", Messages.Login, _hx_o({__fields__={email=true,password=true},email=_self.email,password=_self.password}));
+    _G.msg.post("/controller", Messages.Login, _hx_o({__fields__={username=true},username=_self.username}));
   end);
   require('dirtylarry/dirtylarry').button(_self, "quit", action_id, action, function() 
     _G.msg.post("@system:", __defold_SysMessages.exit, _hx_o({__fields__={code=true},code=0}));
@@ -1479,6 +1612,7 @@ __gui_GameGUI.prototype.init = function(self,_self)
   _G.gui.set_enabled(_G.gui.get_node("a_key"), false);
   _G.gui.set_enabled(_G.gui.get_node("s_key"), false);
   _G.gui.set_enabled(_G.gui.get_node("d_key"), false);
+  _G.gui.set_enabled(_G.gui.get_node("scoreboard"), false);
 end
 __gui_GameGUI.prototype.on_message = function(self,_self,message_id,message,sender) 
   if (message_id) == Messages.Connected then 
@@ -1489,6 +1623,22 @@ __gui_GameGUI.prototype.on_message = function(self,_self,message_id,message,send
     _G.gui.set_enabled(_G.gui.get_node("d_key"), true);
   elseif (message_id) == Messages.Disconnected then 
     _G.gui.set_color(_G.gui.get_node("pip"), _G.vmath.vector4(255, 0, 0, .5));
+  elseif (message_id) == __gui_GameGUI.SetScoreboard then 
+    _G.gui.set_enabled(_G.gui.get_node("scoreboard"), true);
+    local text = "";
+    local obj = __haxe_ds_ObjectMap.new();
+    __lua_PairTools.pairsFold(message, function(k,v,m) 
+      obj.h[k] = v;
+      obj.k[k] = true;
+      do return obj end;
+    end, obj);
+    local this1 = obj;
+    local _g_keys = this1:keys();
+    while (_g_keys:hasNext()) do 
+      local key = _g_keys:next();
+      text = Std.string(Std.string(Std.string(Std.string(Std.string("") .. Std.string(key)) .. Std.string(": ")) .. Std.string(this1:get(key))) .. Std.string("\n")) .. Std.string(text);
+    end;
+    _G.gui.set_text(_G.gui.get_node("scoreboard"), text);
   elseif (message_id) == Messages.SetText then 
     _G.gui.set_text(_G.gui.get_node("text"), message.text); end;
 end
@@ -1528,6 +1678,10 @@ __defold_support_Init.init = function(exports)
   exports.gui_GameGUI_on_message = function(_self,message_id,message,sender) 
     script:on_message(_self, message_id, message, sender);
   end;
+  local script = Beer.new();
+  exports.Beer_on_message = function(_self,message_id,message,sender) 
+    script:on_message(_self, message_id, message, sender);
+  end;
   local script = Player.new();
   exports.Player_init = function(_self) 
     script:init(_self);
@@ -1545,12 +1699,48 @@ end
 
 __haxe_IMap.new = {}
 __haxe_IMap.__name__ = true
+__haxe_IMap.prototype = _hx_e();
+__haxe_IMap.prototype.get= nil;
+__haxe_IMap.prototype.keys= nil;
+
+__haxe_IMap.prototype.__class__ =  __haxe_IMap
 
 __haxe_Json.new = {}
 __haxe_Json.__name__ = true
 __haxe_Json.stringify = function(value,replacer,space) 
   do return __haxe_format_JsonPrinter.print(value, replacer, space) end;
 end
+
+__haxe_ds_ObjectMap.new = function() 
+  local self = _hx_new(__haxe_ds_ObjectMap.prototype)
+  __haxe_ds_ObjectMap.super(self)
+  return self
+end
+__haxe_ds_ObjectMap.super = function(self) 
+  self.h = ({});
+  self.k = ({});
+end
+__haxe_ds_ObjectMap.__name__ = true
+__haxe_ds_ObjectMap.__interfaces__ = {__haxe_IMap}
+__haxe_ds_ObjectMap.prototype = _hx_e();
+__haxe_ds_ObjectMap.prototype.h= nil;
+__haxe_ds_ObjectMap.prototype.k= nil;
+__haxe_ds_ObjectMap.prototype.get = function(self,key) 
+  do return self.h[key] end
+end
+__haxe_ds_ObjectMap.prototype.keys = function(self) 
+  local _gthis = self;
+  local cur = next(self.h, nil);
+  do return _hx_o({__fields__={next=true,hasNext=true},next=function(self) 
+    local ret = cur;
+    cur = next(_gthis.k, cur);
+    do return ret end;
+  end,hasNext=function(self) 
+    do return cur ~= nil end;
+  end}) end
+end
+
+__haxe_ds_ObjectMap.prototype.__class__ =  __haxe_ds_ObjectMap
 
 __haxe_ds_StringMap.new = function() 
   local self = _hx_new(__haxe_ds_StringMap.prototype)
@@ -1564,6 +1754,13 @@ __haxe_ds_StringMap.__name__ = true
 __haxe_ds_StringMap.__interfaces__ = {__haxe_IMap}
 __haxe_ds_StringMap.prototype = _hx_e();
 __haxe_ds_StringMap.prototype.h= nil;
+__haxe_ds_StringMap.prototype.get = function(self,key) 
+  local ret = self.h[key];
+  if (ret == __haxe_ds_StringMap.tnull) then 
+    ret = nil;
+  end;
+  do return ret end
+end
 __haxe_ds_StringMap.prototype.remove = function(self,key) 
   if (self.h[key] == nil) then 
     do return false end;
@@ -2056,6 +2253,10 @@ __lua_UserData.__name__ = true
 
 __lua_PairTools.new = {}
 __lua_PairTools.__name__ = true
+__lua_PairTools.pairsFold = function(table,func,seed) 
+  for k,v in _G.pairs(table) do seed = func(k,v,seed) end;
+  do return seed end;
+end
 __lua_PairTools.ipairsIterator = function(table) 
   local _hx_1_p_next, _hx_1_p_table, _hx_1_p_index = _G.ipairs(table);
   local next = _hx_1_p_next;
@@ -2105,7 +2306,13 @@ local _hx_static_init = function()
   String.__name__ = true;
   Array.__name__ = true;
   _hxdefold_ = _hxdefold_ or {}
-  __defold_support_Init.init(_hxdefold_);Messages.EnableControl = _G.hash("enable_control");
+  __defold_support_Init.init(_hxdefold_);Beer.SetId = _G.hash("set_id");
+  
+  Beer.BeerClaimed = _G.hash("beer_claimed");
+  
+  Beer.Nuke = _G.hash("nuke");
+  
+  Messages.EnableControl = _G.hash("enable_control");
   
   Messages.ReportPlayerPosition = _G.hash("report_player_position");
   
@@ -2135,9 +2342,13 @@ local _hx_static_init = function()
   
   __defold_GoMessages.disable = _G.hash("disable");
   
+  __defold_PhysicsMessages.collision_response = _G.hash("collision_response");
+  
   __defold_SpriteMessages.play_animation = _G.hash("play_animation");
   
   __defold_SysMessages.exit = _G.hash("exit");
+  
+  __gui_GameGUI.SetScoreboard = _G.hash("set_scoreboard");
   
   __haxe_ds_StringMap.tnull = ({});
   
@@ -2152,6 +2363,14 @@ _hx_funcToField = function(f)
   else
     return f
   end
+end
+
+_hx_box_mr = function(x,nt)
+    res = _hx_o({__fields__={}})
+    for i,v in ipairs(nt) do
+      res[v] = x[i]
+    end
+    return res
 end
 
 _hx_table = {}

@@ -4,6 +4,7 @@ import defold.Sprite;
 
 typedef PlayerData = {
 	@property(0) var skin:Int;
+	@property(false) var controlled:Bool;
 
 	var state:String;
 	var dirY:String;
@@ -11,7 +12,6 @@ typedef PlayerData = {
 	var animation:String;
 	var sprinting:Bool;
 	var speed:Vector3;
-	var controlled:Bool;
 	var reportPlayerPosition:Bool;
 }
 
@@ -24,20 +24,21 @@ class Player extends defold.support.Script<PlayerData> {
 	override function init(self:PlayerData) {
 		self.state = "idle";
 		self.dirY = "s";
+		self.dirX = "";
 		self.speed = Vmath.vector3();
 	}
 
 	override function update(self:PlayerData, dt) {
-		if (!self.controlled)
-			return;
-
 		// Set Initial Animation
-		if (self.animation == "" && self.skin != 0) {
+		if (self.animation == null && self.skin != 0) {
 			self.animation = '${self.skin}_idle_s';
 			Msg.post("#sprite", SpriteMessages.play_animation, {
 				id: hash(self.animation),
 			});
 		}
+
+		if (!self.controlled)
+			return;
 
 		// Remember Stuff
 		var oldState = self.state;
@@ -81,7 +82,7 @@ class Player extends defold.support.Script<PlayerData> {
 	override function on_message<T>(self:PlayerData, message_id:Message<T>, message:T, sender:Url) {
 		switch (message_id) {
 			case Messages.EnableControl:
-				self.controlled = true;
+				Go.set("#player", "controlled", true);
 				Msg.post(".", GoMessages.acquire_input_focus);
 			case Messages.ReportPlayerPosition:
 				self.reportPlayerPosition = true;
@@ -89,6 +90,8 @@ class Player extends defold.support.Script<PlayerData> {
 				Label.set_text("#email", message.text);
 			case Messages.Move:
 				move(self, message.skin, message.animation, message.position);
+			case PhysicsMessages.collision_response:
+				// pprint(message);
 		}
 	}
 

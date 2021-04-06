@@ -6,3 +6,4 @@ import defold.Physics;
 import Defold.hash;
 import Defold.pprint;
 import nakama.Nakama;
+import nakama.Types;

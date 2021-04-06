@@ -18,12 +18,11 @@ class Messages {
 typedef MatchState = {
 	var match_id:String;
 	var op_code:Int;
-	var data:MoveCmd;
+	var data:Dynamic;
 }
 
 typedef LoginCmd = {
-	var email:String;
-	var password:String;
+	var username:String;
 };
 
 typedef TextCmd = {
@@ -39,4 +38,5 @@ typedef MoveCmd = {
 typedef JoinMatchCmd = {
 	var skin:Int;
 	var match:nakama.Match;
+	var users:lua.Table<Int, nakama.User>;
 }

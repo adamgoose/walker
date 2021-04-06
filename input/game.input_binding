@@ -42,6 +42,10 @@ key_trigger {
   input: KEY_LSHIFT
   action: "sprint"
 }
+key_trigger {
+  input: KEY_ESC
+  action: "esc"
+}
 mouse_trigger {
   input: MOUSE_BUTTON_1
   action: "touch"
